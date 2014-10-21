@@ -5,6 +5,12 @@
  * 
  * @author Jordan Heier, Cameron Hardin, Will McNamara
  */
-public class Server {
+import java.util.concurrent.ForkJoinPool;
 
+public class Server {
+	public static void main(String[] args) {
+		ForkJoinPool pool = new ForkJoinPool();
+		SessionThread st = new SessionThread();
+		pool.invoke(st);
+	}
 }
