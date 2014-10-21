@@ -12,14 +12,7 @@ public class SessionThread extends Thread {
     
     public void run() {
         try {
-            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-            BufferedReader in = new BufferedReader(
-	    new InputStreamReader(socket.getInputStream()));
-	    char[] responsePacket = new char[255];
-	    int bytesRead = 0;
-            while(bytesRead < responsePacket.length) {
-	        bytesRead += in.read(responsePacket);
-	    }
+	     
 	    socket.close();
         }catch (Exception e) {
             e.printStackTrace();
