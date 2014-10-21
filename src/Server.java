@@ -16,7 +16,7 @@ public class Server {
 		packet.putInt(0);
 		packet.putShort((short) 1);
 		packet.putShort((short) 980);
-		packet.put("Hello World".getBytes());
+		packet.put("hello world".getBytes());
 		
 		Session session = Session.createSession(packet);
 		if(session == null) {

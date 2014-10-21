@@ -9,10 +9,10 @@ public class PacketHeader {
 	
 	public PacketHeader(ByteBuffer packet) {
 		System.out.println("Packet size: " + packet.array().length);
-		payloadLen = packet.getInt(0);
-		pSecret = packet.getInt(4);
-		step = packet.getShort(8);
-		studentNum = packet.getShort(10);
+		payloadLen = packet.getInt();
+		pSecret = packet.getInt();
+		step = packet.getShort();
+		studentNum = packet.getShort();
 	}
 	
     public int getPayloadLen() {
