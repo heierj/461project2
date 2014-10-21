@@ -5,12 +5,21 @@
  * 
  * @author Jordan Heier, Cameron Hardin, Will McNamara
  */
-import java.util.concurrent.ForkJoinPool;
+import java.net.*;
+import java.io.*;
 
 public class Server {
-	public static void main(String[] args) {
-		ForkJoinPool pool = new ForkJoinPool();
-		SessionThread st = new SessionThread();
-		pool.invoke(st);
-	}
+
+	public static void main(String[] args) throws IOException {
+		int portNumber = 12235;
+		try (ServerSocket serverSocket = new ServerSocket(portNumber)) { 
+		    while (true) {
+			    Socket s = serverSocket.accept();
+			    new SessionThread(s).start();
+			}
+		} catch (IOException e) {
+		    System.err.println("Could not listen on port " + portNumber);
+		    System.exit(-1);
+                }
+       }
 }
