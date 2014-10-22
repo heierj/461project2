@@ -8,7 +8,6 @@ public class PacketHeader {
 	private short studentNum;
 	
 	public PacketHeader(ByteBuffer packet) {
-		System.out.println("Packet size: " + packet.array().length);
 		payloadLen = packet.getInt();
 		pSecret = packet.getInt();
 		step = packet.getShort();

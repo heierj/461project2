@@ -1,4 +1,6 @@
-import java.nio.ByteBuffer;
+import java.io.*;
+import java.net.*;
+import java.util.concurrent.ForkJoinPool;
 
 /** 
  * This class will act as the entry point for clients. It will
@@ -7,21 +9,30 @@ import java.nio.ByteBuffer;
  * 
  * @author Jordan Heier, Cameron Hardin, Will McNamara
  */
-import java.net.*;
-import java.io.*;
-
 public class Server {
-
+  private static ForkJoinPool fjPool = new ForkJoinPool();
+  private static final int PORT_NUM = 12235;
+  
 	public static void main(String[] args) throws IOException {
-		int portNumber = 12235;
-		try (ServerSocket serverSocket = new ServerSocket(portNumber)) { 
-		    while (true) {
-			    Socket s = serverSocket.accept();
-			    new SessionThread(s).start();
+	  DatagramSocket serverSocket = null;
+	  
+	  try { 
+	    serverSocket = new DatagramSocket(PORT_NUM);
+	    
+	    // Loop endlessly, receiving the initial packets and then handing off
+	    // responsibility to a new thread
+		  while (true) {
+		    DatagramPacket receivePacket = new DatagramPacket(new byte[64], 64);
+		    serverSocket.receive(receivePacket);
+		    fjPool.execute(new Session(receivePacket));
 			}
 		} catch (IOException e) {
-		    System.err.println("Could not listen on port " + portNumber);
-		    System.exit(-1);
-                }
-       }
+		  // Attempt to close up the server socket
+		  if (serverSocket != null) {
+        serverSocket.close();
+		  }
+		  System.err.println(e.getMessage());
+		  System.exit(-1);
+		}
+	}
 }
