@@ -163,7 +163,6 @@ public class Session extends RecursiveAction {
 		
 		// Set up the tcp socket for stage c
 		ServerSocket cSocket;
-		int tcpPort;
 		while(true) {
 			try {
 				// Random number between [10000, 60000) which are reasonable port values
