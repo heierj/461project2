@@ -1,5 +1,7 @@
+import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.ServerSocket;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.util.Random;
@@ -11,13 +13,12 @@ import java.util.concurrent.RecursiveAction;
  * @author Jordan Heier, Cameron Hardin, Will McNamara
  */
 public class Session extends RecursiveAction {
-	private static final short SERVER_STUDENT_NUM = 576;
 	private static final int HEADER_SIZE = 12;
 
 	private DatagramPacket initialPacket;
 	private static Random rand = new Random();
 
-	private int studentNum;
+	private short studentNum;
 	private int secretA, secretB, secretC, secretD;
 	private int udpPort, tcpPort;
 	private int num, len, num2, len2;
@@ -26,11 +27,19 @@ public class Session extends RecursiveAction {
 		initialPacket = packet;
 	}
 
+	/**
+	 * Performs all stages for this client
+	 */
 	@Override
 	protected void compute() {
 		DatagramSocket bSocket = phaseA();
-		if(bSocket == null) return;
-		phaseB(bSocket);
+		if(bSocket == null) {
+			return;
+		}
+		ServerSocket cSocket = phaseB(bSocket);
+		if(cSocket == null) {
+			return;
+		}
 		phaseC();
 		phaseD();
 	}
@@ -72,7 +81,7 @@ public class Session extends RecursiveAction {
 		}
 		secretA = rand.nextInt();
 
-		ByteBuffer response = startPacket(16, 0);
+		ByteBuffer response = startPacket(16, 0, (short) 2);
 
 		// Attach payload
 		response.putInt(num);
@@ -99,55 +108,96 @@ public class Session extends RecursiveAction {
 		return bSocket;
 	}
 
-	private void phaseB(DatagramSocket bSocket) {
-		// check that payload length = len + 4 (and byte aligned)
+	private ServerSocket phaseB(DatagramSocket bSocket) {
 
-		// boolean[] packetsAck = new boolean[num]
-		//
-		// check packetId
-		// for (int i = 0; i < num; i++) {
-		// DatagramPacket receivePacket = new DatagramPacket(new byte[BUF_SIZE],
-		// BUF_SIZE)
-		// socket.receive(receivePacket)
-		//
-		// ByteBuffer request = ByteBuffer.wrap(receivePacket.getData());
-		//
-		// verifyHeader(first 12 bytes of request)
-		// int packetId = first 4 bytes of payload
-		// check packetId = i
-		// check that payload length = len + 4 (also byte aligned)
-		//
-		// for (int j = 16; j < 16 + len; j++) {
-		// if (request.get(j) != 0) {
-		// error
-		// }
-		// }
-		//
-		// Random r = new Random();
-		// if (r.nextInt(2)) {
-		// ByteBuffer response = new ByteBuffer()
-		// createHeader(response)?
-		// response.put(12, i);
-		//
-		// byte[] responseData = response.array();
-		// DatagramPacket ackPacket = new DatagramPacket(responseData,
-		// responseData.length, receivePacket.getAddress(),
-		// recievePacket.getPort())
-		//
-		// socket.send(ackPacket);
-		// packetsAck[i] = true;
-		// } else {
-		// i--;
-		// }
-		// }
-		//
-		// for (int i = 0; i < num; i++) {
-		// if (!packetsAck[i]) {
-		// error
-		// }
-		// }
-		//
-		// send final UDP packet with random TCP port number and secretB
+		// Start listening for num packets
+		for(int i = 0; i < num; i++) {
+			DatagramPacket packet = new DatagramPacket(new byte[128], 128);
+			try {
+				bSocket.receive(packet);
+			} catch (IOException e) {
+				e.printStackTrace();
+				System.exit(-1);
+			}
+			
+			// Check the packet header
+			ByteBuffer checkPacket = ByteBuffer.wrap(packet.getData());
+			PacketHeader header = getHeader(checkPacket);
+			if(header == null) {
+				return null;
+			}
+			if(!header.checkHeader(len + 4, secretA)) {
+				System.err.println("Incorrect packet header for phase B");
+				return null;
+			}		
+			
+			// Check packet ID and decide whether to send ACK
+			int packetId = checkPacket.getInt();
+			if(i != packetId) {
+				// Wrong packet in sequence
+				return null;
+			} else if(rand.nextBoolean()) {
+				// Send the ACK
+				ByteBuffer ack = startPacket(4, secretA, (short) 1);
+				ack.putInt(i);
+				byte[] ackPack = ack.array();
+				DatagramPacket responsePacket = new DatagramPacket(ackPack,
+						ackPack.length, packet.getAddress(), packet.getPort());
+				DatagramSocket sock;
+
+				try {
+					sock = new DatagramSocket();
+					sock.send(responsePacket);
+					sock.close();
+				} catch (Exception e) {
+					System.err.println("Error sending response in phase B");
+					System.exit(-1);
+				}
+			} else {
+				// Don't send the ACK
+				i--;
+			}
+		}
+
+		bSocket.close();
+		
+		// Set up the tcp socket for stage c
+		ServerSocket cSocket;
+		int tcpPort;
+		while(true) {
+			try {
+				// Random number between [10000, 60000) which are reasonable port values
+				tcpPort = rand.nextInt(50000) + 10000;
+				cSocket = new ServerSocket(tcpPort);
+				cSocket.setSoTimeout(3000);
+				break;
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		secretB = rand.nextInt();
+
+		// Create the response for stage B2
+		ByteBuffer response = startPacket(8, secretA, (short) 2);
+		response.putInt(tcpPort);
+		response.putInt(secretB);
+		byte[] packet = response.array();
+		DatagramPacket responsePacket = new DatagramPacket(packet,
+				packet.length, initialPacket.getAddress(), initialPacket.getPort());
+		
+		// Send B2 response
+		DatagramSocket sock;
+		try {
+			sock = new DatagramSocket();
+			sock.send(responsePacket);
+			sock.close();
+		} catch (Exception e) {
+			System.err.println("Error sending response in phase A");
+			System.exit(-1);
+		}
+		
+		return cSocket;
 	}
 
 	private void phaseC() {
@@ -157,20 +207,21 @@ public class Session extends RecursiveAction {
 	private void phaseD() {
 
 	}
-
+	
 	/**
 	 * Verifies the header is properly formatted. Returns a PacketHeader with
 	 * the header information encapsulated if the data correctly formatted and
 	 * exits with an error otherwise
 	 */
 	private PacketHeader getHeader(ByteBuffer packetData) {
-		if (packetData.array().length < 12) {
+		if (packetData.array().length < HEADER_SIZE) {
 			System.err.println("Malformed packet header");
 			return null;
 		}
 
 		PacketHeader header = new PacketHeader(packetData);
 
+		// Make sure packet is padded
 		if (packetData.array().length % 4 != 0) {
 			System.err.println("Payload not aligned to four bytes");
 			return null;
@@ -186,7 +237,13 @@ public class Session extends RecursiveAction {
 		return header;
 	}
 	
-	private ByteBuffer startPacket(int payloadLen, int pSecret) {
+	/**
+	 * Creates a new packet that is padded and has the header filled in
+	 * @param payloadLen length of packet before padding
+	 * @param pSecret secret from previous stage
+	 * @param step 
+	 */
+	private ByteBuffer startPacket(int payloadLen, int pSecret, short step) {
 		int paddedLen = payloadLen + HEADER_SIZE;
 		
 		// Make sure packet will be 4-byte aligned
@@ -197,29 +254,9 @@ public class Session extends RecursiveAction {
 		ByteBuffer packet = ByteBuffer.allocate(paddedLen);
 		packet.putInt(payloadLen);
 		packet.putInt(pSecret);
-		packet.putShort((short) 2);
-		packet.putShort(SERVER_STUDENT_NUM);
+		packet.putShort(step);
+		packet.putShort(studentNum);
 		
 		return packet;
 	}
-
-	/**
-	 * This function takes a packet received in a1 to create a session. If the
-	 * packet from a1 was not formed correctly null will be returned. Otherwise
-	 * a session object will be returned with the correct student number and
-	 * secrets set.
-	 * 
-	 * public static Session createSession(byte[] a1Packet) { // Parse and check
-	 * the packet header ByteBuffer packet = ByteBuffer.wrap(a1Packet);
-	 * PacketHeader pHeader = new PacketHeader(packet); if(pHeader.getPSecret()
-	 * != 0 || pHeader.getPayloadLen() != 12 || pHeader.getStep() != 1) { return
-	 * null; }
-	 * 
-	 * // Parse and check the payload byte[] payload = new byte[11];
-	 * packet.get(payload, 0, 11); String hello = new String(payload);
-	 * if(!hello.equals("hello world") || packet.get() != 0) { return null; }
-	 * 
-	 * // If the first packet is valid then create the session Session session =
-	 * new Session(pHeader.getStudentNum()); return session; }
-	 */
 }
