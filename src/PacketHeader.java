@@ -29,5 +29,10 @@ public class PacketHeader {
     public short getStudentNum() {
     	return studentNum;
     }
+
+	public boolean checkHeader(int payloadLen, int pSecret) {
+		return getPayloadLen() == payloadLen && getPSecret() == pSecret && getStep() == 1;
+	}
+    
    
 }

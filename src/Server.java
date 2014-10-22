@@ -21,18 +21,18 @@ public class Server {
 	    
 	    // Loop endlessly, receiving the initial packets and then handing off
 	    // responsibility to a new thread
-		  while (true) {
+		while (true) {
 		    DatagramPacket receivePacket = new DatagramPacket(new byte[64], 64);
 		    serverSocket.receive(receivePacket);
 		    fjPool.execute(new Session(receivePacket));
-			}
-		} catch (IOException e) {
+	    }
+	  } catch (IOException e) {
 		  // Attempt to close up the server socket
 		  if (serverSocket != null) {
-        serverSocket.close();
+              serverSocket.close();
 		  }
-		  System.err.println(e.getMessage());
+	      System.err.println(e.getMessage());
 		  System.exit(-1);
-		}
+	  }
 	}
 }
