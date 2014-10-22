@@ -1,8 +1,11 @@
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.Random;
 import java.util.concurrent.RecursiveAction;
@@ -12,6 +15,7 @@ import java.util.concurrent.RecursiveAction;
  * 
  * @author Jordan Heier, Cameron Hardin, Will McNamara
  */
+@SuppressWarnings("serial")
 public class Session extends RecursiveAction {
 	private static final int HEADER_SIZE = 12;
 
@@ -22,6 +26,7 @@ public class Session extends RecursiveAction {
 	private int secretA, secretB, secretC, secretD;
 	private int udpPort, tcpPort;
 	private int num, len, num2, len2;
+	private char c;
 
 	Session(DatagramPacket packet) {
 		initialPacket = packet;
@@ -40,8 +45,11 @@ public class Session extends RecursiveAction {
 		if(cSocket == null) {
 			return;
 		}
-		phaseC();
-		phaseD();
+		Socket dSocket = phaseC(cSocket);
+		if(dSocket == null) {
+			return;
+		}
+		phaseD(dSocket);
 	}
 
 	private DatagramSocket phaseA() {
@@ -101,7 +109,7 @@ public class Session extends RecursiveAction {
 			sock.close();
 		} catch (Exception e) {
 			System.err.println("Error sending response in phase A");
-			System.exit(-1);
+			return null;
 		}
 
 		
@@ -116,8 +124,8 @@ public class Session extends RecursiveAction {
 			try {
 				bSocket.receive(packet);
 			} catch (IOException e) {
-				e.printStackTrace();
-				System.exit(-1);
+				System.err.println("Failed to receive packet B1");
+				return null;
 			}
 			
 			// Check the packet header
@@ -151,7 +159,7 @@ public class Session extends RecursiveAction {
 					sock.close();
 				} catch (Exception e) {
 					System.err.println("Error sending response in phase B");
-					System.exit(-1);
+					return null;
 				}
 			} else {
 				// Don't send the ACK
@@ -193,17 +201,55 @@ public class Session extends RecursiveAction {
 			sock.close();
 		} catch (Exception e) {
 			System.err.println("Error sending response in phase A");
-			System.exit(-1);
+			return null;
 		}
 		
 		return cSocket;
 	}
 
-	private void phaseC() {
-
+	/** 
+	 * Waits for a connection on the socket. If it receives one before
+	 * timing out it will send the response
+	 * @param cSocket the socket to wait for connection on
+	 */
+	private Socket phaseC(ServerSocket cSocket) {
+		
+		// Wait for connection 
+		Socket connectionSocket;
+		DataOutputStream out;
+		try {
+			connectionSocket = cSocket.accept();
+			out = new DataOutputStream(connectionSocket.getOutputStream());
+		} catch(SocketTimeoutException e) {
+			System.err.println("Socket has been waiting 3 seconds, timing out");
+			return null;
+		} catch (IOException e) {
+			return null;
+		}
+		
+		// Create response packet
+		ByteBuffer response = startPacket(13, secretB, (short) 2);
+		num2 = rand.nextInt(50);
+		len2 = rand.nextInt(100);
+		secretC = rand.nextInt();
+		c = (char) (rand.nextInt(26) + 'a');
+		response.putInt(num2);
+		response.putInt(len2);
+		response.putInt(secretC);
+		response.putChar(c);
+		
+		// Send response packet
+		try {
+			out.write(response.array());
+		} catch (IOException e) {
+			System.err.println("Failed to send stage C response");
+			return null;
+		}
+		
+		return connectionSocket;
 	}
 
-	private void phaseD() {
+	private void phaseD(Socket dSocket) {
 
 	}
 	
