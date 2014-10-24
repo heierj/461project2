@@ -1,5 +1,6 @@
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.ServerSocket;
@@ -26,7 +27,7 @@ public class Session extends RecursiveAction {
 	private int secretA, secretB, secretC, secretD;
 	private int udpPort, tcpPort;
 	private int num, len, num2, len2;
-	private char c;
+	private byte c;
 
 	Session(DatagramPacket packet) {
 		initialPacket = packet;
@@ -73,7 +74,8 @@ public class Session extends RecursiveAction {
 			return null;
 		}
 
-		num = rand.nextInt(50);
+		//num = rand.nextInt(50);
+		num = 1;
 		len = rand.nextInt(100);
 
 		DatagramSocket bSocket;
@@ -232,11 +234,12 @@ public class Session extends RecursiveAction {
 		num2 = rand.nextInt(50);
 		len2 = rand.nextInt(100);
 		secretC = rand.nextInt();
-		c = (char) (rand.nextInt(26) + 'a');
+		byte c = ((rand.nextInt(26) + 'a') + "").getBytes()[0];
+		this.c = c;
 		response.putInt(num2);
 		response.putInt(len2);
 		response.putInt(secretC);
-		response.putChar(c);
+		response.put(c);
 		
 		// Send response packet
 		try {
@@ -250,8 +253,81 @@ public class Session extends RecursiveAction {
 	}
 
 	private void phaseD(Socket dSocket) {
+		// Wait for connection 
+		InputStream in;
+		DataOutputStream out;
+		try {
+			in = dSocket.getInputStream();
+			out = new DataOutputStream(dSocket.getOutputStream());
+		} catch (IOException e) {
+			System.err.println("Failure creating input stream");
+			return;
+		}
+		
+		// Setup the response buffer
+		int i = 0;
+		for(i = 0; i < num2; i++) {
+			// Make sure packet will be 4-byte aligned
+			int responseSize = HEADER_SIZE + len2; 	
+			if(responseSize % 4 != 0) {
+				responseSize += 4 - (responseSize % 4);
+			}
+			byte[] responsePacket = new byte[responseSize];
+			int bytesRead = 0;
+			while(bytesRead < responsePacket.length) {
+				try {
+					// Try to read in the server response
+					bytesRead += in.read(responsePacket);
+				} catch (IOException e) {
+					System.err.println("Failure reading server response");
+					return;
+				}
+			}
+			if(bytesRead != responseSize) {
+				System.err.println("Incorrect len2 for phase D "+ bytesRead + " instead of " + responseSize);
+				return;
+			}
 
-	}
+			ByteBuffer serverResponse = ByteBuffer.wrap(responsePacket, 0, bytesRead);
+
+			// Check the packet header
+			ByteBuffer checkPacket = ByteBuffer.wrap(responsePacket);
+			PacketHeader header = getHeader(checkPacket);
+			if(header == null) {
+				System.err.println("Incorrect packet header for phase D");
+				return;
+			}
+			if(!header.checkHeader(len2, secretC)) {
+				System.err.println("Incorrect packet header for phase D");
+				return;
+			}		
+			for( int j = HEADER_SIZE; j < HEADER_SIZE + len2; j++) {
+				if(c != serverResponse.get(j)) {
+					System.err.println("Incorrect character for phase D. " +  serverResponse.get(j) + " instead of " + c);
+					return;
+				}
+			}
+	        }	
+		if(i != num2) {
+			System.err.println("Incorrect num2 for phaseD " + i + "instead of " + num2);
+			return;
+                }
+
+		// Create response packet
+		secretD = rand.nextInt();
+		ByteBuffer response = startPacket(4, secretC, (short) 2);
+		response.putInt(secretD);
+
+		
+		// Send response packet
+		try {
+			out.write(response.array());
+			dSocket.close();
+		} catch (IOException e) {
+			System.err.println("Failed to send stage C response");
+			return;
+		}
+        }
 	
 	/**
 	 * Verifies the header is properly formatted. Returns a PacketHeader with
@@ -291,11 +367,11 @@ public class Session extends RecursiveAction {
 	private ByteBuffer startPacket(int payloadLen, int pSecret, short step) {
 		int paddedLen = payloadLen + HEADER_SIZE;
 		
+		
 		// Make sure packet will be 4-byte aligned
 		if(payloadLen % 4 != 0) {
 			paddedLen += 4 - (payloadLen % 4);
 		}
-		
 		ByteBuffer packet = ByteBuffer.allocate(paddedLen);
 		packet.putInt(payloadLen);
 		packet.putInt(pSecret);
