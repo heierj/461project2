@@ -74,8 +74,7 @@ public class Session extends RecursiveAction {
 			return null;
 		}
 
-		//num = rand.nextInt(50);
-		num = 1;
+		num = rand.nextInt(50);
 		len = rand.nextInt(100);
 
 		DatagramSocket bSocket;
@@ -284,7 +283,7 @@ public class Session extends RecursiveAction {
 				}
 			}
 			if(bytesRead != responseSize) {
-				System.err.println("Incorrect len2 for phase D "+ bytesRead + " instead of " + responseSize);
+				System.err.println("Incorrect bytes sent for phase D.");
 				return;
 			}
 
